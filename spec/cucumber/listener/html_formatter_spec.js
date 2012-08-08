@@ -20,7 +20,9 @@ describe("Cucumber.Listener.HtmlFormatter", function () {
     summaryFormatter = createSpy("summary formatter");
     spyOn(Cucumber.Listener, 'SummaryFormatter').andReturn(summaryFormatter);
 
-    htmlTemplate = createSpyWithStubs("html template", { addFeature: null, addScenario: null, addStepResult: null, saveReport: null });
+    htmlTemplate = createSpyWithStubs("html template", { addFeature: null, addScenario: null, addStepResult: null,
+                                                         saveReport: null, lastFeatureTestingComplete: null,
+                                                         lastScenarioTestingComplete: null});
     spyOn(Cucumber.Listener.HtmlFormatter, "HtmlTemplate").andReturn(htmlTemplate);
 
     htmlFormatter = Cucumber.Listener.HtmlFormatter(options);
@@ -224,8 +226,35 @@ describe("Cucumber.Listener.HtmlFormatter", function () {
       callback = createSpy("callback");
     });
 
+    it("tells the html template the last scenario has completed being tested", function () {
+      htmlFormatter.handleAfterScenarioEvent(event, callback);
+      expect(htmlTemplate.lastScenarioTestingComplete).toHaveBeenCalled();
+    });
+
     it("calls back", function () {
       htmlFormatter.handleAfterScenarioEvent(event, callback);
+      expect(callback).toHaveBeenCalled();
+    });
+
+  });
+
+  describe("handleAfterFeatureEvent", function () {
+
+    var event, callback, lastFeature;
+
+    beforeEach(function () {
+      event = createSpy("event");
+      callback = createSpy("callback");
+    });
+
+    it("tells the html template the last feature has completed being tested", function () {
+      htmlFormatter.handleAfterFeatureEvent(event, callback);
+
+      expect(htmlTemplate.lastFeatureTestingComplete).toHaveBeenCalled();
+    });
+
+    it("calls back", function () {
+      htmlFormatter.handleAfterFeatureEvent(event, callback);
       expect(callback).toHaveBeenCalled();
     });
 

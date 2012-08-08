@@ -93,12 +93,89 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
     });
   });
 
+  describe("lastFeatureTestingComplete()", function () {
+    var lastFeature;
+
+    beforeEach(function () {
+      lastFeature = createSpy("last feature");
+      spyOn(htmlTemplate, "lastFeature").andReturn(lastFeature);
+    });
+
+    it("gets the last feature", function () {
+      htmlTemplate.lastFeatureTestingComplete();
+
+      expect(htmlTemplate.lastFeature).toHaveBeenCalled();
+    });
+
+    describe("when the last feature's class name is still 'feature'", function () {
+      beforeEach(function () {
+        lastFeature.className = "feature";
+      });
+
+      it("changes the class name to 'feature passed'", function () {
+        htmlTemplate.lastFeatureTestingComplete();
+
+        expect(lastFeature.className).toBe("feature passed");
+      });
+    });
+
+    describe("when the last feature's class name is something other than 'feature'", function () {
+      var modifiedClassName = "feature with other classes";
+      beforeEach(function () {
+        lastFeature.className = modifiedClassName;
+      });
+
+      it("leaves the current class name intact", function () {
+        htmlTemplate.lastFeatureTestingComplete();
+        expect(lastFeature.className).toBe(modifiedClassName);
+      });
+    });
+  });
+
+  describe("lastScenarioTestingComplete", function () {
+
+    var lastScenario;
+
+    beforeEach(function () {
+      lastScenario = createSpy("last scenario");
+      spyOn(htmlTemplate, "lastScenario").andReturn(lastScenario);
+    });
+
+    it("gets the last scenario", function () {
+      htmlTemplate.lastScenarioTestingComplete();
+      expect(htmlTemplate.lastScenario).toHaveBeenCalled();
+    });
+
+    describe("when the last scenario's class name is still 'scenario'", function () {
+      beforeEach(function () {
+        lastScenario.className = "scenario";
+      });
+
+      it("changes the class name to 'scenario passed'", function () {
+        htmlTemplate.lastScenarioTestingComplete();
+        expect(lastScenario.className).toBe("scenario passed");
+      });
+    });
+
+    describe("when the last scenario's class name is something other than 'scenario'", function () {
+      var modifiedClassName = "scenario with other classes";
+      beforeEach(function () {
+        lastScenario.className = modifiedClassName;
+      });
+
+      it("leaves the current class name intact", function () {
+        htmlTemplate.lastScenarioTestingComplete();
+        expect(lastScenario.className).toBe(modifiedClassName);
+      });
+    });
+  });
+
   describe("addScenario()", function () {
     var scenarioTemplateKey, scenarioTemplateName, lastFeature, elements,
         scenarioTemplateTags, finishedTemplate, keyword, name, tags;
 
     beforeEach(function () {
-      keyword = "Scenario:"
+      keyword = "Scenario:";
       name = "A scenario description";
       tags = "dev";
       finishedTemplate = createSpy("finished scenario template");
@@ -178,7 +255,9 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
 
     beforeEach(function() {
       step = createSpy("step");
-      stepResult = createSpy("step result");
+      stepResult = createSpyWithStubs("step result", {isFailed: null, isSkipped: null,
+                                                      isSuccessful: null, isPending: null,
+                                                      isUndefined: null});
 
       keyword = "When"
       name = "something happens";
@@ -210,6 +289,160 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
       htmlTemplate.addStepResult(keyword, name, step, stepResult);
 
       expect(newElement.className).toBe("step");
+    });
+
+    it("checks if the step failed", function () {
+      htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+      expect(stepResult.isFailed).toHaveBeenCalled();
+    });
+
+    describe("when the step failed", function () {
+      var lastFeature;
+      beforeEach(function () {
+        stepResult.isFailed.andReturn(true);
+
+        lastFeature = createSpy("last feature");
+        spyOn(htmlTemplate, "lastFeature").andReturn(lastFeature);
+        lastFeature.className = "feature";
+      });
+
+      it("adds the failed class to the li element", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(newElement.className).toBe("step failed");
+      });
+
+      it("adds the failed class to the last scenario", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(lastScenario.className).toBe("scenario failed");
+      });
+
+      it("adds the failed class to the last feature", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(htmlTemplate.lastFeature().className).toBe("feature failed");
+      });
+    });
+
+    describe("when the step passed", function () {
+      var lastFeature;
+
+      beforeEach(function () {
+        stepResult.isSuccessful.andReturn(true);
+      });
+
+      it("checks if the step was successful", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(stepResult.isSuccessful).toHaveBeenCalled();
+      });
+
+      it("adds the passed class to the li element", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(newElement.className).toBe("step passed");
+      });
+    });
+
+    it("checks if the step is skipped", function () {
+      htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+      expect(stepResult.isSkipped).toHaveBeenCalled();
+    });
+
+    describe("when step is skipped", function () {
+      beforeEach(function () {
+        stepResult.isSkipped.andReturn(true);
+        newElement.className = "step";
+      });
+
+      it("adds the skipped class to the step li element", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(newElement.className).toBe("step skipped");
+      });
+    });
+
+
+    it("checks if the step is pending", function () {
+      htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+      expect(stepResult.isPending).toHaveBeenCalled();
+    });
+
+    describe("when the step is pending", function () {
+      var lastFeature;
+      beforeEach(function () {
+        stepResult.isPending.andReturn(true);
+        newElement.className = "step";
+
+        lastFeature = createSpy("last feature");
+        lastFeature.className = "feature";
+        spyOn(htmlTemplate, "lastFeature").andReturn(lastFeature);
+      });
+
+      it("adds the pending class to the step li element", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(newElement.className).toBe("step pending");
+      });
+
+      it("adds the pending class to the last feature if its class is 'feature'", function () {
+        lastFeature.className = "feature";
+
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(lastFeature.className).toBe("feature pending");
+      });
+
+      it("adds the pending class to the last scenario if its class is 'scenario'", function () {
+        lastScenario.className = "scenario";
+
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(lastScenario.className).toBe("scenario pending");
+      });
+    });
+
+    it("checks if the step is undefined", function () {
+      htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+      expect(stepResult.isUndefined).toHaveBeenCalled();
+    });
+
+    describe("when step is undefined", function () {
+      var lastFeature;
+
+      beforeEach(function () {
+        stepResult.isUndefined.andReturn(true);
+        newElement.className = "step";
+
+        lastFeature = createSpy("last feature");
+        lastFeature.className = "feature";
+        spyOn(htmlTemplate, "lastFeature").andReturn(lastFeature);
+
+        lastScenario.className = "scenario";
+      });
+
+      it("adds the undefinedStep class to the step li element", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(newElement.className).toBe("step undefinedStep");
+      });
+
+      it("adds the undefinedStep class to the last feature if class is 'feature'", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(lastFeature.className).toBe("feature undefinedStep");
+      });
+
+      it("adds the undefinedStep class to the last scenario if class is 'scenario'", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(lastScenario.className).toBe("scenario undefinedStep");
+      });
     });
 
     it("adds the built step result html to the new li's innerHTML", function () {
