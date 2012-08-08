@@ -30,11 +30,12 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
 
   describe("addFeature()", function () {
     var featureTemplateKey, featureTemplateName, featureTemplateDesc,
-        featureTemplateTags, finishedTemplate, keyword, name, tags;
+        featureTemplateTags, finishedTemplate, keyword, name, tags, desc;
 
     beforeEach(function () {
       keyword = "Feature:"
       name = "A Feature Name";
+      desc = "feature-description";
       tags = "dev";
       finishedTemplate = createSpy("finished template");
       featureTemplateTags = createSpyWithStubs("feature template string for tags", {replace: finishedTemplate});
@@ -46,40 +47,40 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
     });
 
     it("builds the feature html from the feature template", function () {
-      htmlTemplate.addFeature(keyword, name, tags);
+      htmlTemplate.addFeature(keyword, name, desc, tags);
 
       expect(featureTemplateKey.replace).toHaveBeenCalledWith("%KEYWORD%", keyword);
       expect(featureTemplateName.replace).toHaveBeenCalledWith("%NAME%", name);
-      expect(featureTemplateDesc.replace).toHaveBeenCalledWith("%DESCRIPTION%", "No description");
+      expect(featureTemplateDesc.replace).toHaveBeenCalledWith("%DESCRIPTION%", desc);
       expect(featureTemplateTags.replace).toHaveBeenCalledWith("%TAGS%", tags);
     });
 
     it("creates a new li element to put the feature in", function () {
-      htmlTemplate.addFeature(keyword, name, tags);
+      htmlTemplate.addFeature(keyword, name, desc, tags);
 
       expect(document.createElement).toHaveBeenCalledWith("li");
     });
 
     it("adds the 'feature' class to the li element", function () {
-      htmlTemplate.addFeature(keyword, name, tags);
+      htmlTemplate.addFeature(keyword, name, desc, tags);
 
       expect(newElement.className).toBe("feature");
     });
 
     it("adds the built feature html to the new li's innerHTML", function () {
-      htmlTemplate.addFeature(keyword, name, tags);
+      htmlTemplate.addFeature(keyword, name, desc, tags);
 
       expect(newElement.innerHTML).toBe(finishedTemplate);
     });
 
     it("gets the features html element", function () {
-      htmlTemplate.addFeature(keyword, name, tags);
+      htmlTemplate.addFeature(keyword, name, desc, tags);
 
       expect(document.getElementById).toHaveBeenCalledWith("features");
     });
 
     it("adds the new feature li element to the features element", function () {
-      htmlTemplate.addFeature(keyword, name, tags);
+      htmlTemplate.addFeature(keyword, name, desc, tags);
 
       expect(element.appendChild).toHaveBeenCalledWith(newElement);
     });
@@ -87,7 +88,7 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
     it("sets the new feature li as the last feature", function () {
       expect(htmlTemplate.lastFeature()).not.toBe(newElement);
 
-      htmlTemplate.addFeature(keyword, name, tags);
+      htmlTemplate.addFeature(keyword, name, desc, tags);
 
       expect(htmlTemplate.lastFeature()).toBe(newElement);
     });
@@ -251,18 +252,20 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
 
   describe("addStepResult()", function () {
     var step, stepResult, stepTemplateKey, stepTemplateName, lastScenario, elements,
-        finishedTemplate, keyword, name;
+        finishedTemplate, keyword, name, stepTemplateAttachment, attachment;
 
     beforeEach(function() {
-      step = createSpy("step");
+      attachment = "attachment";
+      step = createSpyWithStubs("step", {hasAttachment: false, getAttachmentContents: attachment});
+
       stepResult = createSpyWithStubs("step result", {isFailed: null, isSkipped: null,
                                                       isSuccessful: null, isPending: null,
                                                       isUndefined: null});
-
       keyword = "When"
       name = "something happens";
       finishedTemplate = createSpy("finished step result template");
-      stepTemplateName = createSpyWithStubs("step result template string with name token", {replace: finishedTemplate});
+      stepTemplateAttachment = createSpyWithStubs("step result template string with attachment token", {replace: finishedTemplate});
+      stepTemplateName = createSpyWithStubs("step result template string with name token", {replace: stepTemplateAttachment});
       stepTemplateKey = createSpyWithStubs("step result template string with keyword token", {replace: stepTemplateName});
 
       elements = createSpyWithStubs("elements array", {item: element});
@@ -272,10 +275,44 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
       HtmlTemplate.STEP_TEMPLATE = stepTemplateKey;
     });
 
-    it("builds the step result html from the step result template", function () {
+    it("checks if the step has an attachment", function () {
+      htmlTemplate.addStepResult(keyword, name, step, stepResult);
+      expect(step.hasAttachment).toHaveBeenCalled();
+    });
+
+    describe("when it doesn't have an attachment", function () {
+      it("replaces the %ATTACHMENT% token with an empty string", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
+        expect(stepTemplateAttachment.replace).toHaveBeenCalledWith("%ATTACHMENT%", "");
+      });
+    });
+
+    describe("when it has an attachment", function () {
+      beforeEach(function () {
+        step.hasAttachment.andReturn(true);
+      });
+
+      it("gets the attachment contents from the step", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+        expect(step.getAttachmentContents).toHaveBeenCalled();
+      });
+
+      it("replaces the %ATTACHMENT% token with the attachment contents", function () {
+        htmlTemplate.addStepResult(keyword, name, step, stepResult);
+        expect(stepTemplateAttachment.replace).toHaveBeenCalledWith("%ATTACHMENT%", attachment);
+      });
+    });
+
+    it("replaces the %KEYWORD% token with the keyword in the step template", function () {
       htmlTemplate.addStepResult(keyword, name, step, stepResult);
 
       expect(stepTemplateKey.replace).toHaveBeenCalledWith("%KEYWORD%", keyword);
+    });
+
+    it("replaces the %NAME% token with the keyword in the step template", function () {
+      htmlTemplate.addStepResult(keyword, name, step, stepResult);
+
       expect(stepTemplateName.replace).toHaveBeenCalledWith("%NAME%", name);
     });
 
@@ -477,18 +514,37 @@ describe("Cucumber.Listener.HtmlFormatter.HtmlTemplate", function () {
   });
 
   describe("saveReport()", function () {
-    var html;
+    var html, reportPath, logs, summaryElement;
     beforeEach(function () {
+      summaryElement = createSpy("summaryElement");
+      logs = createSpy("logs");
+      reportPath = "/path/to/cuke_report.html";
       html = createSpy("html");
       spyOn(htmlTemplate, "getHtml").andReturn(html);
+      document.getElementById.andReturn(summaryElement);
+    });
+
+    it("gets the summary report element", function () {
+      htmlTemplate.saveReport(reportPath, logs);
+
+      expect(document.getElementById).toHaveBeenCalledWith("summary");
+    });
+
+    it("adds the logs to the summary element's innerHTML", function () {
+      htmlTemplate.saveReport(reportPath, logs);
+
+      expect(summaryElement.innerHTML).toBe(logs);
+    });
+
+    it("gets the HTML for the report", function () {
+      htmlTemplate.saveReport(reportPath, logs);
+
+      expect(htmlTemplate.getHtml).toHaveBeenCalled();
     });
 
     it("saves the generated HTML to the file path specified", function () {
-      var reportPath = "/path/to/cuke_report.html";
+      htmlTemplate.saveReport(reportPath, logs);
 
-      htmlTemplate.saveReport(reportPath);
-
-      expect(htmlTemplate.getHtml).toHaveBeenCalled();
       expect(fsSpy.writeFileSync).toHaveBeenCalledWith(reportPath, html);
     });
   });

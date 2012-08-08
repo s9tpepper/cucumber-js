@@ -7,17 +7,22 @@ describe("Cucumber.Listener.HtmlFormatter", function () {
     formatter,
     htmlFormatter,
     summaryFormatter,
+    scenariosSummary,
+    stepsSummary,
     formatterHearMethod,
     htmlTemplate;
 
   beforeEach(function () {
+    scenariosSummary = "scenarios summary";
+    stepsSummary = "steps summary";
     options = createSpy("options");
 
-    formatter = createSpyWithStubs("formatter", {log: null});
+    formatter = createSpyWithStubs("formatter", {log: null, getLogs: null});
     formatterHearMethod = spyOnStub(formatter, 'hear');
     spyOn(Cucumber.Listener, 'Formatter').andReturn(formatter);
 
-    summaryFormatter = createSpy("summary formatter");
+    summaryFormatter = createSpyWithStubs("summary formatter", {getScenariosSummary: scenariosSummary,
+                                                                getStepsSummary: stepsSummary});
     spyOn(Cucumber.Listener, 'SummaryFormatter').andReturn(summaryFormatter);
 
     htmlTemplate = createSpyWithStubs("html template", { addFeature: null, addScenario: null, addStepResult: null,
@@ -83,15 +88,44 @@ describe("Cucumber.Listener.HtmlFormatter", function () {
 
   });
 
+  describe("stringifyTags()", function () {
+    var firstTag, secondTag, tags;
+
+    beforeEach(function () {
+      firstTag = createSpyWithStubs("first tag", {getName: "@first"});
+      secondTag = createSpyWithStubs("second tag", {getName: "@second"});
+      tags = [firstTag, secondTag];
+    })
+
+    it("gets the name from each tag in the array", function () {
+      htmlFormatter.stringifyTags(tags);
+
+      expect(firstTag.getName).toHaveBeenCalled();
+      expect(secondTag.getName).toHaveBeenCalled();
+    });
+
+    it("concatenates the tag names", function () {
+      var expectedTagsString = "@first @second";
+
+      var tagsString = htmlFormatter.stringifyTags(tags);
+
+      expect(tagsString).toBe(expectedTagsString);
+    });
+  });
+
   describe("handleBeforeFeatureEvent()", function () {
 
-    var feature, event, callback, keyword, name, tags;
+    var feature, event, callback, keyword, name, tags, tag, tagsStr, desc;
 
     beforeEach(function () {
       keyword  = "feature-keyword";
+      desc     = "feature-description";
       name     = "feature-name";
-      tags     = "feature-tags";
-      feature  = createSpyWithStubs("feature", { getKeyword: keyword, getName: name, getTags: tags });
+      tag      = createSpyWithStubs("tag", {getName: "@tag"});
+      tags     = [tag];
+      tagsStr  = "@tag";
+      feature  = createSpyWithStubs("feature", { getKeyword: keyword, getName: name,
+                                                 getDescription: desc, getTags: tags });
       event    = createSpyWithStubs("event", { getPayloadItem: feature });
       callback = createSpy("callback");
     });
@@ -111,14 +145,27 @@ describe("Cucumber.Listener.HtmlFormatter", function () {
       expect(feature.getName).toHaveBeenCalled();
     });
 
+    it("gets the feature description", function () {
+      htmlFormatter.handleBeforeFeatureEvent(event, callback);
+      expect(feature.getDescription).toHaveBeenCalled();
+    });
+
     it("gets the feature tags", function () {
       htmlFormatter.handleBeforeFeatureEvent(event, callback);
       expect(feature.getTags).toHaveBeenCalled();
     });
 
+    it("stringifies the tags", function () {
+      spyOn(htmlFormatter, "stringifyTags");
+
+      htmlFormatter.handleBeforeFeatureEvent(event, callback);
+
+      expect(htmlFormatter.stringifyTags).toHaveBeenCalledWith(tags);
+    });
+
     it("adds the feature to the html template", function () {
       htmlFormatter.handleBeforeFeatureEvent(event, callback);
-      expect(htmlTemplate.addFeature).toHaveBeenCalledWith(keyword, name, tags);
+      expect(htmlTemplate.addFeature).toHaveBeenCalledWith(keyword, name, desc, tagsStr);
     });
 
     it("calls back", function () {
@@ -130,12 +177,14 @@ describe("Cucumber.Listener.HtmlFormatter", function () {
 
   describe("handleBeforeScenarioEvent()", function () {
 
-    var event, scenario, keyword, name, tags, callback;
+    var event, scenario, keyword, name, tags, callback, tag, tagsStr;
 
     beforeEach(function () {
       keyword = "scenario-keyword";
       name = "scenario-name";
-      tags = "scenario-tags";
+      tag      = createSpyWithStubs("tag", {getName: "@tag"});
+      tags     = [tag];
+      tagsStr  = "@tag";
       scenario = createSpyWithStubs("scenario", {getKeyword: keyword, getName: name, getTags: tags});
       event = createSpyWithStubs("event", {getPayloadItem: scenario});
       callback = createSpy("callback");
@@ -161,9 +210,17 @@ describe("Cucumber.Listener.HtmlFormatter", function () {
       expect(scenario.getTags).toHaveBeenCalled();
     });
 
+    it("stringifies the tags", function () {
+      spyOn(htmlFormatter, "stringifyTags");
+
+      htmlFormatter.handleBeforeScenarioEvent(event, callback);
+
+      expect(htmlFormatter.stringifyTags).toHaveBeenCalledWith(tags);
+    });
+
     it("adds the scenario to the html template", function () {
       htmlFormatter.handleBeforeScenarioEvent(event, callback);
-      expect(htmlTemplate.addScenario).toHaveBeenCalledWith(keyword, name, tags);
+      expect(htmlTemplate.addScenario).toHaveBeenCalledWith(keyword, name, tagsStr);
     });
 
     it("calls back", function () {
@@ -260,25 +317,59 @@ describe("Cucumber.Listener.HtmlFormatter", function () {
 
   });
 
-  describe("handleAfterFeaturesEvent()", function () {
+  describe("getLogs", function () {
+    var expectedLogs;
+    beforeEach(function () {
+      expectedLogs = scenariosSummary + "<br />" + stepsSummary;
+    });
 
-    var event, callback;
+    it("gets the scenarios summary from the summary formatter", function () {
+      htmlFormatter.getLogs();
+      expect(summaryFormatter.getScenariosSummary).toHaveBeenCalled();
+    });
+
+    it("gets the steps summary from the summary formatter", function () {
+      htmlFormatter.getLogs();
+      expect(summaryFormatter.getStepsSummary).toHaveBeenCalled();
+    });
+
+    it("concatenates the two summaries with a br tag", function () {
+      var logs = htmlFormatter.getLogs();
+      expect(logs).toBe(expectedLogs);
+    });
+  });
+
+  describe("handleAfterFeaturesEvent()", function () {
+    var event, callback, logs, reportPath;
 
     beforeEach(function () {
       event = createSpy("event");
       callback = createSpy("callback");
+      logs = createSpy("logs");
+      reportPath = createSpy("reportPath");
+
+      spyOn(htmlFormatter, "getLogs").andReturn(logs);
+      spyOn(htmlFormatter, "getReportPath").andReturn(reportPath);
+    });
+
+    it("gets the logs", function () {
+      htmlFormatter.handleAfterFeaturesEvent(event, callback);
+      expect(htmlFormatter.getLogs).toHaveBeenCalled();
+    });
+
+    it("gets the report file path", function () {
+      htmlFormatter.handleAfterFeaturesEvent(event, callback);
+      expect(htmlFormatter.getReportPath).toHaveBeenCalled();
     });
 
     it("tells the html template to save the report file", function () {
       htmlFormatter.handleAfterFeaturesEvent(event, callback);
-      expect(htmlTemplate.saveReport).toHaveBeenCalled();
+      expect(htmlTemplate.saveReport).toHaveBeenCalledWith(reportPath, logs);
     });
 
     it("calls back", function () {
       htmlFormatter.handleAfterFeaturesEvent(event, callback);
       expect(callback).toHaveBeenCalled();
     });
-
   });
-
 });
